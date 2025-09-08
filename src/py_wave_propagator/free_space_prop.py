@@ -1,14 +1,35 @@
 import numpy as np
+from numpy.typing import NDArray
+from typing import Optional, Tuple
 
 
 class Wave2d:
     """
-    Given a wave components on a plane and optical parameters,
-    calculates the wave components at another plane.
+    Given a wavefield in a plane (x, y, 0) and other optical parameters,
+    calculates the wave components at another plane. Propoagation to angled
+    surfaces supported.
+    
+    1. Matsushima, K. and Shimobaba, T., 2009. Band-limited angular spectrum method 
+    for numerical simulation of free-space propagation in far and near fields. 
+    Optics express, 17(22), pp.19662-19673.
+    
+    2. Matsushima, K., Schimmel, H. and Wyrowski, F., 2003. Fast calculation method 
+    for optical diffraction on tilted planes by use of the angular spectrum of plane 
+    waves. Journal of the Optical Society of America A, 20(9), pp.1755-1762.
     """
 
-    def __init__(self, numPx: list = [1392, 1040], 
-                 sizePx: list = [0.00645, 0.00645], wl: float = 658*1e-6):
+    def __init__(self, 
+                 numPx: Tuple[int, int] = [1392, 1040], 
+                 sizePx: Tuple[float, float] = [0.00645, 0.00645], 
+                 wl: float = 658*1e-6):
+        """
+        Class initialization. Base units in mm. 
+
+        Args:
+            numPx (Tuple[int, int], optional): Number of pixels [Nx, Ny]. Defaults to [1392, 1040].
+            sizePx (Tuple[float, float], optional): Size of pixels [dx, dy]. Defaults to [0.00645, 0.00645].
+            wl (float, optional): wavelength in air. Defaults to 658*1e-6.
+        """
         
         ## setup params
         # wavelength, camera specs, resolutions, and limits
@@ -143,7 +164,7 @@ class Wave2d:
 
         return [uOblique, vOblique, J_phi]
 
-    def wavefield(self, wave: np.array(np.complex128)):
+    def wavefield(self, wave: NDArray[np.complex128]):
         assert [wave.shape[1], wave.shape[0]] == self.numPx, "Incorrect number of pixels specified in constructor"
         # not using this wavefield to calculate here for speed as function may be used repeatedly
 
