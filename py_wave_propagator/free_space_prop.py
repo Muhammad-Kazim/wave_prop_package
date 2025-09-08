@@ -20,27 +20,26 @@ class Wave2d:
 
     def __init__(self, 
                  numPx: Tuple[int, int] = [1392, 1040], 
-                 sizePx: Tuple[float, float] = [0.00645, 0.00645], 
-                 wl: float = 658*1e-6):
+                 sizePx: Tuple[float, float] = [6.45e-6, 6.45e-6], 
+                 wl: float = 658*1e-9):
         """
-        Class initialization. Base units in mm. 
+        Class initialization. Base units in meters. 
 
         Args:
             numPx (Tuple[int, int], optional): Number of pixels [Nx, Ny]. Defaults to [1392, 1040].
-            sizePx (Tuple[float, float], optional): Size of pixels [dx, dy]. Defaults to [0.00645, 0.00645].
-            wl (float, optional): wavelength in air. Defaults to 658*1e-6.
+            sizePx (Tuple[float, float], optional): Size of pixels [dx, dy]. Defaults to [6.45e-6, 6.45e-6].
+            wl (float, optional): wavelength in air. Defaults to 658*1e-9.
         """
         
         ## setup params
         # wavelength, camera specs, resolutions, and limits
 
-        self.mm = 1e-3 # standard otherwise specified
         ## Inputs
-        self.wl = wl*self.mm
+        self.wl = wl*self
 
         ## Camera-based calculations or planes size and resolution
         self.numPx = numPx # Pixels along the [x-axis, y-axis] or samples
-        self.sizePx = [sizePx[0]*self.mm, sizePx[1]*self.mm] # pixel size [x-axis, y-axis]
+        self.sizePx = [sizePx[0], sizePx[1]] # pixel size [x-axis, y-axis]
 
         self.sizeSensorX = self.numPx[0]*self.sizePx[0] # sensor size along x-axis
         self.sizeSensorY = self.numPx[1]*self.sizePx[1] # sensor size along y-axis
@@ -55,7 +54,8 @@ class Wave2d:
         self.delU = 1/self.Sx
         self.delV = 1/self.Sy
 
-        self.freqRows = np.linspace(-1/(2*self.sizePx[0]), 1/(2*self.sizePx[0]), int(1/(self.sizePx[0]*self.delU))) ## -maxFreq/2, +maxFreq/2
+        ## -+ maxFreq = -+ samplingFreq/2
+        self.freqRows = np.linspace(-1/(2*self.sizePx[0]), 1/(2*self.sizePx[0]), int(1/(self.sizePx[0]*self.delU)))
         self.freqCols = np.linspace(-1/(2*self.sizePx[1]), 1/(2*self.sizePx[1]), int(1/(self.sizePx[1]*self.delV)))
 
         self.u, self.v = np.meshgrid(self.freqRows, self.freqCols)
@@ -68,8 +68,8 @@ class Wave2d:
 
         self.w = np.sqrt(k) # freq_z
 
-        self.wavefield_z0 = None
-        self.wavefield_z1 = None
+        self.wavefield_z0 = None # wavefield at the input
+        self.wavefield_z1 = None # wavefield at the output
 
         self.fft_wave_z0 = None
         self.fft_wave_z1 = None
@@ -79,11 +79,22 @@ class Wave2d:
         # self.uOblique = np.copy(self.u) # w/o x and y ticks spectrum at z1 oblique should look the same as at not-oblique
         # self.vOblique = np.copy(self.v)
     
+    def wavefield(self, wave: NDArray[np.complex128]):
+        assert [wave.shape[1], wave.shape[0]] == self.numPx, "Incorrect number of pixels specified in constructor"
+        # not using this wavefield to calculate here for speed as function may be used repeatedly
+
+        linImg = np.zeros([int(self.Sy/self.sizePx[1]), int(self.Sx/self.sizePx[0])], dtype=np.complex128) # creates zeros of the size of the sensor
+        linImg[int(linImg.shape[0]/2 - wave.shape[0]/2):int(linImg.shape[0]/2 + wave.shape[0]/2), 
+            int(linImg.shape[1]/2 - wave.shape[1]/2):int(linImg.shape[1]/2 + wave.shape[1]/2)] = wave # ensures the wave is at the center of linImg
+ 
+        self.wavefield_z0 = wave
+        self.fft_wave_z0 = np.fft.fftshift(np.fft.fft2(linImg))
+        
     def propogate(self, dist: float):
         assert self.wavefield_z0 is not None, "Use method wavefied first"
         assert self.fft_wave_z0 is not None, "Use method wavefied first"
 
-        self.z = dist*self.mm # distance to propogate along the z axis
+        self.z = dist # distance to propogate along the z axis
         self.uLimit = 1/(np.sqrt((2*self.delU*self.z)**2 + 1)* self.wl)
         self.vLimit = 1/(np.sqrt((2*self.delV*self.z)**2 + 1)* self.wl)
         
@@ -163,17 +174,6 @@ class Wave2d:
             J_phi = T_inv[0, 0] - (uOblique/fzOblique)*T_inv[0, 2]
 
         return [uOblique, vOblique, J_phi]
-
-    def wavefield(self, wave: NDArray[np.complex128]):
-        assert [wave.shape[1], wave.shape[0]] == self.numPx, "Incorrect number of pixels specified in constructor"
-        # not using this wavefield to calculate here for speed as function may be used repeatedly
-
-        linImg = np.zeros([int(self.Sy/self.sizePx[1]), int(self.Sx/self.sizePx[0])], dtype=np.complex128) # creates zeros of the size of the sensor
-        linImg[int(linImg.shape[0]/2 - wave.shape[0]/2):int(linImg.shape[0]/2 + wave.shape[0]/2), 
-            int(linImg.shape[1]/2 - wave.shape[1]/2):int(linImg.shape[1]/2 + wave.shape[1]/2)] = wave # ensures the wave is at the center of linImg
- 
-        self.wavefield_z0 = wave
-        self.fft_wave_z0 = np.fft.fftshift(np.fft.fft2(linImg))
 
     def setup_limit_info(self):
         assert self.z != None, "Distance is set to none"
