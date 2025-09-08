@@ -63,18 +63,27 @@ def propagate_beam_vol(
     # print(field.dtype)
     return field
 
-
-def propagate(field, wavelength, spatial_resolution, dist, padding=None, direction='forward', bandlimited=False):
-    """Propagation through a homogenous medium
+ 
+def propagate(field: NDArray[np.complex128], 
+              wavelength: float, 
+              spatial_resolution: Tuple[float, float, float], 
+              dist: float, 
+              padding: Optional[int] = None, 
+              direction: Optional[str] = 'forward', 
+              bandlimited: Optional[bool] = False
+    ) -> NDArray[np.complex128]:
+    """
+    Propagation through a homogenous medium. Base unit is meters.
+    Use when input has to be updated.
 
     Args:
-        field (float): 2d complex field on a plane
+        field (NDArray[np.complex128]): 2d complex field on a plane
         wavelength (float): if not air, than wl =/ RI_background
         spatial_resolution (): _description_
         dist (float): distance bw parallel planes in meters
 
     Returns:
-        complex: field at parallel plane distance dist away 
+        NDArray[np.complex128]: field at parallel plane distance dist away 
     """
     if padding:
         field = np.pad(field, padding, 'edge') # edge make sense
