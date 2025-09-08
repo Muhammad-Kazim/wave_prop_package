@@ -35,7 +35,7 @@ class Wave2d:
         # wavelength, camera specs, resolutions, and limits
 
         ## Inputs
-        self.wl = wl*self
+        self.wl = wl
 
         ## Camera-based calculations or planes size and resolution
         self.numPx = numPx # Pixels along the [x-axis, y-axis] or samples
@@ -176,6 +176,7 @@ class Wave2d:
         return [uOblique, vOblique, J_phi]
 
     def setup_limit_info(self):
+        # TBD, this may not be accurate.
         assert self.z != None, "Distance is set to none"
         ## Nice to know 1: max freq and angle that the camera/plane can record without aliasing
         maxFreqPossible = self.samplingRate/2
@@ -189,9 +190,9 @@ class Wave2d:
         maxFreqSetupX = maxAngleSetupX/self.wl
         maxFreqSetupY = maxAngleSetupY/self.wl
 
-        print(f'Max Freq and Angle the camera/plane can record without aliasing: {maxFreqPossible*self.mm} cycles/mm | {maxAnglePossible} radians')
+        print(f'Max Freq and Angle the camera/plane can record without aliasing: {maxFreqPossible} cycles/m | {maxAnglePossible} radians')
         
-        print(f'Max Freq and Angle the setup allows (freqs > do not reach the next plane): {(maxFreqSetupX*self.mm, maxFreqSetupY*self.mm)} cycles/mm | {(maxAngleSetupX, maxAngleSetupY)} radians')
+        print(f'Max Freq and Angle the setup allows (freqs > do not reach the next plane): {(maxFreqSetupX, maxFreqSetupY)} cycles/m | {(maxAngleSetupX, maxAngleSetupY)} radians')
 
     
     def visualizations(self):
