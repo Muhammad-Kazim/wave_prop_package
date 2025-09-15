@@ -1,6 +1,7 @@
 import numpy as np
 from numpy.typing import NDArray
 from typing import Optional, Tuple
+from scipy.interpolate import RegularGridInterpolator
 
 
 class Wave2d:
@@ -58,7 +59,7 @@ class Wave2d:
         self.freqRows = np.linspace(-1/(2*self.sizePx[0]), 1/(2*self.sizePx[0]), int(1/(self.sizePx[0]*self.delU)))
         self.freqCols = np.linspace(-1/(2*self.sizePx[1]), 1/(2*self.sizePx[1]), int(1/(self.sizePx[1]*self.delV)))
 
-        self.u, self.v = np.meshgrid(self.freqRows, self.freqCols)
+        self.u, self.v = np.meshgrid(self.freqRows, self.freqCols, indexing='ij')
         k = self.wl**(-2) - self.u**2 - self.v**2
 
         # removing evanscent waves: limiting transfer function does that but to remove 
@@ -71,29 +72,26 @@ class Wave2d:
         self.wavefield_z0 = None # wavefield at the input
         self.wavefield_z1 = None # wavefield at the output
 
-        self.fft_wave_z0 = None
-        self.fft_wave_z1 = None
+        self.fft_wave_z0 = None # source plane spectrum with padding
+        # self.fft_wave_z1 = None # parallel plane at dist z
         self.z = None # distance to propagate wavefield at z0 to parallel plane at z1
 
-        # same optical axis as self.wavefield_z1 and self.wavefield_z0 at z1
-        # self.uOblique = np.copy(self.u) # w/o x and y ticks spectrum at z1 oblique should look the same as at not-oblique
-        # self.vOblique = np.copy(self.v)
     
     def wavefield(self, wave: NDArray[np.complex128]):
-        assert [wave.shape[1], wave.shape[0]] == self.numPx, "Incorrect number of pixels specified in constructor"
+        assert [wave.shape[0], wave.shape[1]] == self.numPx, "Incorrect number of pixels specified in constructor"
         # not using this wavefield to calculate here for speed as function may be used repeatedly
 
-        linImg = np.zeros([int(self.Sy/self.sizePx[1]), int(self.Sx/self.sizePx[0])], dtype=np.complex128) # creates zeros of the size of the sensor
+        linImg = np.zeros([int(self.Sy/self.sizePx[0]), int(self.Sx/self.sizePx[1])], dtype=np.complex128) # creates zeros of the size of the sensor
         linImg[int(linImg.shape[0]/2 - wave.shape[0]/2):int(linImg.shape[0]/2 + wave.shape[0]/2), 
             int(linImg.shape[1]/2 - wave.shape[1]/2):int(linImg.shape[1]/2 + wave.shape[1]/2)] = wave # ensures the wave is at the center of linImg
  
         self.wavefield_z0 = wave
         self.fft_wave_z0 = np.fft.fftshift(np.fft.fft2(linImg))
+        # self.fft_wave_z0 = np.fft.fftshift(np.fft.fft2(wave, s=[wave.shape[0]*2, wave.shape[1]*2]))
         
     def propogate(self, dist: float):
         assert self.wavefield_z0 is not None, "Use method wavefied first"
-        assert self.fft_wave_z0 is not None, "Use method wavefied first"
-
+        
         self.z = dist # distance to propogate along the z axis
         self.uLimit = 1/(np.sqrt((2*self.delU*self.z)**2 + 1)* self.wl)
         self.vLimit = 1/(np.sqrt((2*self.delV*self.z)**2 + 1)* self.wl)
@@ -105,75 +103,63 @@ class Wave2d:
         mask[np.logical_or(np.abs(self.u) > int(self.uLimit), np.abs(self.v) >= int(self.vLimit))] = 0
 
         H = mask*H
-        self.fft_wave_z1 = H*self.fft_wave_z0
+        fft_wave_z1 = H*self.fft_wave_z0
 
-        self.wavefield_z1 = np.fft.ifft2(np.fft.fftshift(self.fft_wave_z1))
+        self.wavefield_z1 = np.fft.ifft2(np.fft.ifftshift(fft_wave_z1))
         self.wavefield_z1 = self.wavefield_z1[
-            int(self.fft_wave_z1.shape[0]/2 - self.wavefield_z0.shape[0]/2):int(self.fft_wave_z0.shape[0]/2 + self.wavefield_z0.shape[0]/2),
-            int(self.fft_wave_z1.shape[1]/2 - self.wavefield_z0.shape[1]/2):int(self.fft_wave_z0.shape[1]/2 + self.wavefield_z0.shape[1]/2)    
+            int(fft_wave_z1.shape[0]/2 - self.wavefield_z0.shape[0]/2):int(self.fft_wave_z0.shape[0]/2 + self.wavefield_z0.shape[0]/2),
+            int(fft_wave_z1.shape[1]/2 - self.wavefield_z0.shape[1]/2):int(self.fft_wave_z0.shape[1]/2 + self.wavefield_z0.shape[1]/2)    
             ]
         
         return self.wavefield_z1
     
-    def obliquePlaneFreqs(self, rotation : list = [0, 0]):
+    def obliquePlaneProp(self, rotation : list = [0, 0], degrees: bool = True):
+
+        # rotation applied on wavefield at z0
+        # only works around for 1 axis at a time: see notebook v2_... for details
+
+        assert self.wavefield_z0 is not None, "Use method wavefied first"
         
-        # waves received at z1: a plane perfectly orthogonal to the optical axis aka parallel plane
-        # object at z0 taken to not be parallel
-        # once propagated back from z1 to a porallel plane at z0, use fn to evaluate 
-        # freqs at the non-prallel plane at z0
-        # Note: freqs coefficients and wavefield coefficient remain exactly the same (exxcluding J(u, v)), 
-        # only  the freq bins shift based on the tilt of the plane in space.
+        if degrees:
+            rot_x = rotation[0]*np.pi/180
+            rot_y = rotation[1]*np.pi/180
+        else:
+            rot_x = rotation[0]
+            rot_y = rotation[1]
 
-        # rotation theorem: apply for plane XZ and plane YZ
-
-        assert self.fft_wave_z1 is not None, "Use method propagate first" 
-        # if oblique on z=0, then propagate to with dist = 0 so as to not change the 
-        # input wavefield and corresponding fft
+        u_hat = np.fft.fftshift(np.fft.fftfreq(self.wavefield_z0.shape[0], self.sizePx[0]))
+        v_hat = np.fft.fftshift(np.fft.fftfreq(self.wavefield_z0.shape[1], self.sizePx[1]))
         
-        theta = rotation[0]
-        phi = rotation[1]
+        fft_wave_z0 = np.fft.fftshift(np.fft.fft2(self.wavefield_z0))
 
-        # uOblique = np.copy(self.u)
-        # vOblique = np.copy(self.v)
-        fz = self.wl**(-2) - self.u**2 - self.v**2
-        # removing evanscent waves: limiting transfer function does that but to remove 
-        # numerical errors that may occur, safer to zero freqs > 1/wl
-        if not np.all(fz > 0):
-            fz[fz < 0] = 0
+        interp = RegularGridInterpolator((u_hat, v_hat), fft_wave_z0, method='linear', bounds_error=False, fill_value=None)
+
+        T_inv_x = np.array([[1, 0, 0], 
+                            [0, np.cos(rot_x), -1*np.sin(rot_x)], 
+                            [0, np.sin(rot_x), np.cos(rot_x)]], dtype=np.float64)
+
+        T_inv_y = np.array([[np.cos(rot_y), 0, np.sin(rot_y)], 
+                            [0, 1, 0], 
+                            [-1*np.sin(rot_y), 0, np.cos(rot_y)]], dtype=np.float64)
+
+        T_inv = np.matmul(T_inv_x, T_inv_y)
         
-        fz = np.sqrt(fz)
-
-        T_inv = np.array([[np.cos(phi), 0, np.sin(phi)], 
-                          [0, 1, 0], 
-                          [-1*np.sin(phi), 0, np.cos(phi)]]) # source to ref plane transformation
+        u_hat = np.fft.fftshift(np.fft.fftfreq(int(self.wavefield_z0.shape[0]*np.cos(rot_y)), self.sizePx[0]))
+        v_hat = np.fft.fftshift(np.fft.fftfreq(int(self.wavefield_z0.shape[1]*np.cos(rot_x)), self.sizePx[1]))
         
-        T = np.linalg.inv(T_inv) # ref to source plane transformation
+        U_hat, V_hat = np.meshgrid(u_hat, v_hat, indexing='ij')
+        W_hat = np.sqrt(1/((self.wl)**2) - U_hat**2 - V_hat**2)
 
-        print(f'Rotation aroud (X-axis, Y-axis): {(theta, phi)}')
+        UVW_shift = np.matmul(np.matmul(T_inv_x.transpose(), T_inv_y.transpose()), np.array([0, 0, 1/self.wl]).reshape(3, 1))
+        UVW = np.matmul(T_inv, np.stack([U_hat, V_hat, W_hat], axis=0).reshape(3, -1)).reshape(3, *U_hat.shape)
 
-        # a, b = np.cos(theta), np.sin(theta)
-        # c, d = np.cos(phi), np.sin(phi)
+        J = np.abs((T_inv[0, 1]*T_inv[1, 2] - T_inv[0, 2]*T_inv[2, 1])*U_hat/W_hat + (T_inv[0, 2]*T_inv[1, 0] - T_inv[0, 0]*T_inv[1, 2])*V_hat/W_hat + T_inv[0, 0]*T_inv[1, 1] - T_inv[0, 1]*T_inv[1, 0])
+        wave_z_obl = np.fft.ifft2(np.fft.ifftshift(interp((UVW[0] + UVW_shift[0], UVW[1] + UVW_shift[1]))*J))
 
-        if theta != 0: # rotation around x
-            # uOblique = uOblique
-            # vOblique = vOblique*a - fz*b
-            # fz = vOblique*b + fz*a
-            pass
+        padx = int((256 - 256*np.cos(rot_y))/2)
+        pady = int((256 - 256*np.cos(rot_x))/2)
         
-        if phi != 0: # rotation around y
-            # uOblique = uOblique*c + fz*d
-            # vOblique = vOblique
-            # fz = -1*uOblique*d + fz*c
-            uOblique = T[0, 0]*self.u + T[0, 1]*self.v + T[0, 2]*fz
-            vOblique = T[1, 0]*self.u + T[1, 1]*self.v + T[1, 2]*fz
-            fzOblique = T[2, 0]*self.u + T[2, 1]*self.v + T[2, 2]*fz
-
-            # uOblique = uOblique*T_inv[0, 0] + fzOblique*T_inv[0, 2]
-
-            #Jacobian when rotation around y
-            J_phi = T_inv[0, 0] - (uOblique/fzOblique)*T_inv[0, 2]
-
-        return [uOblique, vOblique, J_phi]
+        return np.pad(wave_z_obl, ((padx, padx), (pady, pady)))
 
     def setup_limit_info(self):
         # TBD, this may not be accurate.
