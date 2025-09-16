@@ -130,8 +130,10 @@ class Wave2d:
         Nx = self.wavefield_z0.shape[0]
         Ny = self.wavefield_z0.shape[1]
         
-        u_hat = np.fft.fftshift(np.fft.fftfreq(Nx, self.sizePx[0]))
-        v_hat = np.fft.fftshift(np.fft.fftfreq(Ny, self.sizePx[1]))
+        # u_hat = np.fft.fftshift(np.fft.fftfreq(Nx, self.sizePx[0]))
+        # v_hat = np.fft.fftshift(np.fft.fftfreq(Ny, self.sizePx[1]))
+        u_hat = np.linspace(-1/(2*self.sizePx[0]), 1/(2*self.sizePx[0]), Nx)
+        v_hat = np.linspace(-1/(2*self.sizePx[1]), 1/(2*self.sizePx[1]), Ny)
         
         fft_wave_z0 = np.fft.fftshift(np.fft.fft2(self.wavefield_z0))
 
@@ -152,10 +154,10 @@ class Wave2d:
         u_max = 1/(2*self.sizePx[0]) # max source plane
         v_max = 1/(2*self.sizePx[1]) # max source plane
         w_max = np.sqrt(1/(self.wl**2) - u_max**2 - v_max**2)
-        
+
         UVW_hat_max = np.matmul(np.matmul(T_inv_x.transpose(), T_inv_y.transpose()), np.array([u_max, v_max, w_max]).reshape(3, 1))
         UVW_hat_min = np.matmul(np.matmul(T_inv_x.transpose(), T_inv_y.transpose()), np.array([-1*u_max, -1*v_max, w_max]).reshape(3, 1))
-        
+
         UVW_hat_shift = -1*np.matmul(np.matmul(T_inv_x.transpose(), T_inv_y.transpose()), np.array([0, 0, 1/self.wl]).reshape(3, 1))
 
         u_hat = np.linspace(UVW_hat_min[0], UVW_hat_max[0], samples_ref_spectrum)
@@ -167,10 +169,10 @@ class Wave2d:
         UVW = np.matmul(T_inv, np.stack([U_hat, V_hat, W_hat], axis=0).reshape(3, -1)).reshape(3, *U_hat.shape)
         U, V, W = UVW
         
-        J = np.abs((T_inv[0, 1]*T_inv[1, 2] - T_inv[0, 2]*T_inv[2, 1])*U_hat/W_hat + (T_inv[0, 2]*T_inv[1, 0] - T_inv[0, 0]*T_inv[1, 2])*V_hat/W_hat + T_inv[0, 0]*T_inv[1, 1] - T_inv[0, 1]*T_inv[1, 0])
-        wave_z_obl = np.fft.ifft2(np.fft.ifftshift(interp((U, V))*J))[:Nx, :Ny] # needs more consideration
-        # wave_z_obl = np.fft.ifft2(np.fft.ifftshift((interp_re((U, V)) + 1j*interp_im((U, V)))*J))
-        
+        J = np.abs((T_inv[0, 1]*T_inv[1, 2] - T_inv[0, 2]*T_inv[1, 1])*U_hat/W_hat + (T_inv[0, 2]*T_inv[1, 0] - T_inv[0, 0]*T_inv[1, 2])*V_hat/W_hat + T_inv[0, 0]*T_inv[1, 1] - T_inv[0, 1]*T_inv[1, 0])
+        wave_z_obl = np.fft.ifft2(np.fft.ifftshift(interp((U, V))))[:Nx, :Ny] # needs more consideration
+        # wave_z_obl = np.fft.ifft2(np.fft.ifftshift((interp_re((U, V))/(samples_ref_spectrum/Nx)**2 + 1j*interp_im((U, V))/(samples_ref_spectrum/Nx)**2)*J), norm='ortho')
+
         cx = Nx/(UVW_hat_max[0] - UVW_hat_min[0])[0]
         cy = Ny/(UVW_hat_max[1] - UVW_hat_min[1])[0]
         x = np.linspace(0, cx, Nx)
