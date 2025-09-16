@@ -1,0 +1,10 @@
+name: 2025_WaveProp
+channels:
+  - defaults
+dependencies:
+  - python=3.8
+  - matplotlib
+  - numpy
+  - scipy
+  - conda-forge::opencv
+  - jupyter
