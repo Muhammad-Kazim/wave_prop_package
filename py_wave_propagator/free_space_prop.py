@@ -135,7 +135,9 @@ class Wave2d:
         
         fft_wave_z0 = np.fft.fftshift(np.fft.fft2(self.wavefield_z0))
 
-        interp = RegularGridInterpolator((u_hat, v_hat), fft_wave_z0, method='linear', bounds_error=False, fill_value=None)
+        interp = RegularGridInterpolator((u_hat, v_hat), fft_wave_z0, method='linear', bounds_error=False, fill_value=0.)
+        # interp_re = RegularGridInterpolator((u_hat, v_hat), fft_wave_z0.real, method='linear', bounds_error=False, fill_value=0.)
+        # interp_im = RegularGridInterpolator((u_hat, v_hat), fft_wave_z0.imag, method='linear', bounds_error=False, fill_value=0.)
 
         T_inv_x = np.array([[1, 0, 0], 
                             [0, np.cos(rot_x), -1*np.sin(rot_x)], 
@@ -147,24 +149,8 @@ class Wave2d:
 
         T_inv = np.matmul(T_inv_y, T_inv_x)
         
-        # u_hat = np.fft.fftshift(np.fft.fftfreq(int(self.wavefield_z0.shape[0]*np.cos(rot_y)), self.sizePx[0]))
-        # v_hat = np.fft.fftshift(np.fft.fftfreq(int(self.wavefield_z0.shape[1]*np.cos(rot_x)), self.sizePx[1]))
-        
-        # U_hat, V_hat = np.meshgrid(u_hat, v_hat, indexing='ij')
-        # W_hat = np.sqrt(1/((self.wl)**2) - U_hat**2 - V_hat**2)
-
-        # UVW_shift = np.matmul(np.matmul(T_inv_x.transpose(), T_inv_y.transpose()), np.array([0, 0, 1/self.wl]).reshape(3, 1))
-        # UVW = np.matmul(T_inv, np.stack([U_hat, V_hat, W_hat], axis=0).reshape(3, -1)).reshape(3, *U_hat.shape)
-
-        # J = np.abs((T_inv[0, 1]*T_inv[1, 2] - T_inv[0, 2]*T_inv[2, 1])*U_hat/W_hat + (T_inv[0, 2]*T_inv[1, 0] - T_inv[0, 0]*T_inv[1, 2])*V_hat/W_hat + T_inv[0, 0]*T_inv[1, 1] - T_inv[0, 1]*T_inv[1, 0])
-        # wave_z_obl = np.fft.ifft2(np.fft.ifftshift(interp((UVW[0] + UVW_shift[0], UVW[1] + UVW_shift[1]))*J))
-
-        # padx = int((256 - 256*np.cos(rot_y))/2)
-        # pady = int((256 - 256*np.cos(rot_x))/2)
-        
-        # return np.pad(wave_z_obl, ((padx, padx), (pady, pady)))
-        
-        u_max = v_max = 1/(2*20e-6) # max source plane
+        u_max = 1/(2*self.sizePx[0]) # max source plane
+        v_max = 1/(2*self.sizePx[1]) # max source plane
         w_max = np.sqrt(1/(self.wl**2) - u_max**2 - v_max**2)
         
         UVW_hat_max = np.matmul(np.matmul(T_inv_x.transpose(), T_inv_y.transpose()), np.array([u_max, v_max, w_max]).reshape(3, 1))
@@ -183,6 +169,7 @@ class Wave2d:
         
         J = np.abs((T_inv[0, 1]*T_inv[1, 2] - T_inv[0, 2]*T_inv[2, 1])*U_hat/W_hat + (T_inv[0, 2]*T_inv[1, 0] - T_inv[0, 0]*T_inv[1, 2])*V_hat/W_hat + T_inv[0, 0]*T_inv[1, 1] - T_inv[0, 1]*T_inv[1, 0])
         wave_z_obl = np.fft.ifft2(np.fft.ifftshift(interp((U, V))*J))[:Nx, :Ny] # needs more consideration
+        # wave_z_obl = np.fft.ifft2(np.fft.ifftshift((interp_re((U, V)) + 1j*interp_im((U, V)))*J))
         
         cx = Nx/(UVW_hat_max[0] - UVW_hat_min[0])[0]
         cy = Ny/(UVW_hat_max[1] - UVW_hat_min[1])[0]
@@ -191,8 +178,8 @@ class Wave2d:
 
         interp = RegularGridInterpolator((x, y), wave_z_obl, method='linear', bounds_error=False, fill_value=0.)
         
-        x = np.linspace(cx/2 - Nx/2*20e-6, cx/2 + Nx/2*20e-6, Nx)
-        y = np.linspace(cy/2 - Ny/2*20e-6, cy/2 + Ny/2*20e-6, Ny)
+        x = np.linspace(cx/2 - Nx/2*self.sizePx[0], cx/2 + Nx/2*self.sizePx[0], Nx)
+        y = np.linspace(cy/2 - Ny/2*self.sizePx[1], cy/2 + Ny/2*self.sizePx[1], Ny)
         X, Y = np.meshgrid(x, y, indexing='ij')
 
         wave_z_obl_2 = interp((X, Y))
