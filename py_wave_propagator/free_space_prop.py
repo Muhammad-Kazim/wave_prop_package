@@ -130,12 +130,18 @@ class Wave2d:
         Nx = self.wavefield_z0.shape[0]
         Ny = self.wavefield_z0.shape[1]
         
+        pad_by = 0
+        pad_wf_z0 = np.pad(self.wavefield_z0, pad_by)
+        if samples_ref_spectrum > Nx:
+            pad_by = int((samples_ref_spectrum - Nx)/2)
+            pad_wf_z0 = np.pad(self.wavefield_z0, pad_by)
+        
         # u_hat = np.fft.fftshift(np.fft.fftfreq(Nx, self.sizePx[0]))
         # v_hat = np.fft.fftshift(np.fft.fftfreq(Ny, self.sizePx[1]))
-        u_hat = np.linspace(-1/(2*self.sizePx[0]), 1/(2*self.sizePx[0]), Nx)
-        v_hat = np.linspace(-1/(2*self.sizePx[1]), 1/(2*self.sizePx[1]), Ny)
+        u_hat = np.linspace(-1/(2*self.sizePx[0]), 1/(2*self.sizePx[0]), Nx+2*pad_by, endpoint=True)
+        v_hat = np.linspace(-1/(2*self.sizePx[1]), 1/(2*self.sizePx[1]), Ny+2*pad_by, endpoint=True)
         
-        fft_wave_z0 = np.fft.fftshift(np.fft.fft2(self.wavefield_z0))
+        fft_wave_z0 = np.fft.fftshift(np.fft.fft2(pad_wf_z0))
 
         interp = RegularGridInterpolator((u_hat, v_hat), fft_wave_z0, method='linear', bounds_error=False, fill_value=0.)
         # interp_re = RegularGridInterpolator((u_hat, v_hat), fft_wave_z0.real, method='linear', bounds_error=False, fill_value=0.)
@@ -160,8 +166,8 @@ class Wave2d:
 
         UVW_hat_shift = -1*np.matmul(np.matmul(T_inv_x.transpose(), T_inv_y.transpose()), np.array([0, 0, 1/self.wl]).reshape(3, 1))
 
-        u_hat = np.linspace(UVW_hat_min[0], UVW_hat_max[0], samples_ref_spectrum)
-        v_hat = np.linspace(UVW_hat_min[1], UVW_hat_max[1], samples_ref_spectrum)
+        u_hat = np.linspace(UVW_hat_min[0], UVW_hat_max[0], samples_ref_spectrum, endpoint=True)
+        v_hat = np.linspace(UVW_hat_min[1], UVW_hat_max[1], samples_ref_spectrum, endpoint=True)
         
         U_hat, V_hat = np.meshgrid(u_hat, v_hat, indexing='ij')
         W_hat = np.sqrt(1/((self.wl)**2) - U_hat**2 - V_hat**2)
@@ -170,7 +176,7 @@ class Wave2d:
         U, V, W = UVW
         
         J = np.abs((T_inv[0, 1]*T_inv[1, 2] - T_inv[0, 2]*T_inv[1, 1])*U_hat/W_hat + (T_inv[0, 2]*T_inv[1, 0] - T_inv[0, 0]*T_inv[1, 2])*V_hat/W_hat + T_inv[0, 0]*T_inv[1, 1] - T_inv[0, 1]*T_inv[1, 0])
-        wave_z_obl = np.fft.ifft2(np.fft.ifftshift(interp((U, V))))[:Nx, :Ny] # needs more consideration
+        wave_z_obl = np.fft.ifft2(np.fft.ifftshift(interp((U, V))))[pad_by:Nx+pad_by, pad_by:Ny+pad_by] # needs more consideration
         # wave_z_obl = np.fft.ifft2(np.fft.ifftshift((interp_re((U, V))/(samples_ref_spectrum/Nx)**2 + 1j*interp_im((U, V))/(samples_ref_spectrum/Nx)**2)*J), norm='ortho')
 
         cx = Nx/(UVW_hat_max[0] - UVW_hat_min[0])[0]
@@ -190,6 +196,83 @@ class Wave2d:
             wave_z_obl_2 = wave_z_obl_2*np.exp(1j*2*np.pi*(UVW_hat_shift[0]*X + UVW_hat_shift[1]*Y))
         
         return wave_z_obl_2
+    
+    def obliquePlaneProp_2(self, rotation : list = [0, 0], degrees: bool = True, padding: int = 512, shift: bool = False):
+
+        # rotation applied on wavefield at z0
+        # only works around for 1 axis at a time: see notebook v2_... for details
+        
+        assert self.wavefield_z0 is not None, "Use method wavefied first"
+        
+        if degrees:
+            rot_x = rotation[0]*np.pi/180
+            rot_y = rotation[1]*np.pi/180
+        else:
+            rot_x = rotation[0]
+            rot_y = rotation[1]
+
+        Nx = self.wavefield_z0.shape[0]
+        Ny = self.wavefield_z0.shape[1]
+        
+        pad_wf_z0 = np.pad(self.wavefield_z0, int(padding/2))
+        Nx += padding
+        Ny += padding
+        
+        # u_hat = np.fft.fftshift(np.fft.fftfreq(Nx, self.sizePx[0]))
+        # v_hat = np.fft.fftshift(np.fft.fftfreq(Ny, self.sizePx[1]))
+        u_hat = np.linspace(-1/(2*self.sizePx[0]), 1/(2*self.sizePx[0]), Nx, endpoint=True)
+        v_hat = np.linspace(-1/(2*self.sizePx[1]), 1/(2*self.sizePx[1]), Ny, endpoint=True)
+        
+        fft_wave_z0 = np.fft.fftshift(np.fft.fft2(pad_wf_z0))
+
+        # interp = RegularGridInterpolator((u_hat, v_hat), fft_wave_z0, method='linear', bounds_error=False, fill_value=0.)
+        interp_amp = RegularGridInterpolator((u_hat, v_hat), np.abs(fft_wave_z0), method='linear', bounds_error=False, fill_value=0.)
+        interp_sin = RegularGridInterpolator((u_hat, v_hat), np.sin(np.angle(fft_wave_z0)), method='linear', bounds_error=False, fill_value=0.)
+        interp_cos = RegularGridInterpolator((u_hat, v_hat), np.cos(np.angle(fft_wave_z0)), method='linear', bounds_error=False, fill_value=1.)
+
+        T_inv_x = np.array([[1, 0, 0], 
+                            [0, np.cos(rot_x), -1*np.sin(rot_x)], 
+                            [0, np.sin(rot_x), np.cos(rot_x)]], dtype=np.float64)
+
+        T_inv_y = np.array([[np.cos(rot_y), 0, np.sin(rot_y)], 
+                            [0, 1, 0], 
+                            [-1*np.sin(rot_y), 0, np.cos(rot_y)]], dtype=np.float64)
+
+        T_inv = np.matmul(T_inv_y, T_inv_x)
+        
+        UVW_hat_shift = np.matmul(np.matmul(T_inv_x.transpose(), T_inv_y.transpose()), np.array([0, 0, 1/self.wl]).reshape(3, 1))
+
+        # if padding > Nx:
+            # u_hat = np.linspace(-1/(2*self.sizePx[0]), 1/(2*self.sizePx[0]), padding, endpoint=False)
+            # v_hat = np.linspace(-1/(2*self.sizePx[1]), 1/(2*self.sizePx[1]), padding, endpoint=False)
+        
+        u_hat = u_hat + UVW_hat_shift[0]
+        v_hat = v_hat + UVW_hat_shift[1]
+        
+        U_hat, V_hat = np.meshgrid(u_hat, v_hat, indexing='ij')
+        W_hat = np.sqrt(1/((self.wl)**2) - U_hat**2 - V_hat**2)
+
+        UVW = np.matmul(T_inv, np.stack([U_hat, V_hat, W_hat], axis=0).reshape(3, -1)).reshape(3, *U_hat.shape)
+        U, V, W = UVW
+        
+        J = np.abs((T_inv[0, 1]*T_inv[1, 2] - T_inv[0, 2]*T_inv[1, 1])*U_hat/W_hat + (T_inv[0, 2]*T_inv[1, 0] - T_inv[0, 0]*T_inv[1, 2])*V_hat/W_hat + T_inv[0, 0]*T_inv[1, 1] - T_inv[0, 1]*T_inv[1, 0])
+        # wave_z_obl = np.fft.ifft2(np.fft.ifftshift(interp((U, V))*J))
+        # [int(padding/2): Nx - 1*int(padding/2), int(padding/2):Ny - int(padding/2)]
+                                                #    (np.cos(np.pi*rot_x*Nx/2*20e-6*(V)))))
+        # [int(padding/2): Nx - 1*int(padding/2), int(padding/2):Ny - int(padding/2)] # needs more consideration
+        wave_z_obl = np.fft.ifft2(np.fft.ifftshift(interp_amp((U, V))*np.exp(1j*np.arctan2(interp_sin((U, V)), interp_cos((U, V))))))
+        # wave_z_obl = np.fft.ifft2(np.fft.ifftshift((interp_re((U, V))/(samples_ref_spectrum/Nx)**2 + 1j*interp_im((U, V))/(samples_ref_spectrum/Nx)**2)*J), norm='ortho')
+
+        if shift:
+            Nx -= padding
+            Ny -= padding
+            
+            x = np.linspace(-1*Nx/2*self.sizePx[0], Nx/2*self.sizePx[0], Nx)
+            y = np.linspace(-1*Ny/2*self.sizePx[1], Ny/2*self.sizePx[1], Ny)
+            X, Y = np.meshgrid(x, y, indexing='ij')
+            wave_z_obl = wave_z_obl*np.exp(1j*2*np.pi*(UVW_hat_shift[0]*X + UVW_hat_shift[1]*Y))
+        
+        return wave_z_obl
 
     def setup_limit_info(self):
         # TBD, this may not be accurate.
