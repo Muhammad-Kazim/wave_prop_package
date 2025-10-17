@@ -198,7 +198,13 @@ class Wave2d:
         return wave_z_obl_2
     
     def obliquePlaneProp_2(self, rotation : list = [0, 0], degrees: bool = True, padding: int = 512, shift: bool = False):
-
+        # source and target plane resolutions
+        # sine cosine, real imaginary, all together
+        # linear, cubic, etc
+        # shift, no shift
+        # return shift along with wavefield
+        # specify which wave z0 or z1
+        
         # rotation applied on wavefield at z0
         # only works around for 1 axis at a time: see notebook v2_... for details
         
