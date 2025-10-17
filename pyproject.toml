@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "py_wave_propagator"
-version = "0.1.0"
+version = "0.2.0"
 description = "Complex wavefield propagtion to parallel and oblique planes."
 authors = [
   { name="Syed Kazim", email="kazimsyed4@gmail.com" }
@@ -15,6 +15,8 @@ license = { file = "LICENSE" }
 dependencies = [
  "numpy>=1.24",
  "scipy>=1.10",
+ "torch>=2.4.0",
+ "torchvision>=0.19.1"
 ]
 
 [tool.setuptools.packages.find]

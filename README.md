@@ -32,6 +32,16 @@ It implements both parallel-plane and tilted-plane propagation based on the **an
 
 ## Installation
 
+This package requires Pytorch. Please install the appropriate CPU/GPU build before installing this package:
+
+```bash
+# CPU-only
+pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+
+# CUDA 12.6 or others
+pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cu126
+```
+
 Install locally with `pip`:
 
 ```bash
