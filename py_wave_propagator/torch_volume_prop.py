@@ -184,7 +184,7 @@ class FreeSpacePropagator:
         if direction == 'backward':
             transfer_function = torch.conj(torch.exp(1j*self.Kz*dist))
         else:
-            transfer_function = torch.exp(1j*Kz*dist)
+            transfer_function = torch.exp(1j*self.Kz*dist)
 
         field = torch.fft.ifft2(field_fft * transfer_function)
         
