@@ -131,6 +131,67 @@ def propagate(field: Tensor,
 
     # print(field.dtype)
     return field
+
+
+class FreeSpacePropagator:
+    def __init__(
+              wavelength: float, 
+              spatial_resolution: Tuple[float, float], 
+              shape: Tuple[int, int],
+              padding: Optional[int] = None, 
+              pad_mode: str = 'edge'
+    ) -> Tensor:
+        """
+        Propagation through a homogenous medium. Base unit is meters.
+        Use when input has to be updated.
+    
+        Args:
+            field (Tensor): 2d complex field on a plane
+            wavelength (float): if not air, than wl =/ RI_background
+            spatial_resolution (): _description_
+            dist (float): distance bw parallel planes in meters
+    
+        Returns:
+            NDArray[np.complex128]: field at parallel plane distance dist away 
+        """
+
+        if padding:
+            self.padding = padding
+            self.PAD = torchvision.transforms.Pad(padding, padding_mode=pad_mode) # edge make sense
+        else:
+            self.PAD = None
+            self.padding = False
+            padding = 0
+             
+        k0 = 2 * torch.pi / wavelength
+        Nx, Ny = shape[0]+padding*2, shape[1]+padding*2
+        dx, dy = spatial_resolution
+        
+        # Spatial frequency grid
+        kx = torch.fft.fftfreq(Nx, dx) * 2 * torch.pi
+        ky = torch.fft.fftfreq(Ny, dy) * 2 * torch.pi
+        Kx, Ky = torch.meshgrid(kx, ky, indexing='ij')
+        
+        self.Kz = k0**2 - Kx**2 - Ky**2
+        mask = torch.sigmoid(self.Kz/1e-12) # to remove negatives which remove evanascent waves
+        self.Kz = torch.sqrt(self.Kz*mask)
+
+    def forward(self, field: Tensor, dist: float, direction: Optional[str] = 'forward') -> Tensor:
+        if self.padding:
+            field = self.PAD(field.real) + 1j*self.PAD(field.imag)
+
+        field_fft = torch.fft.fft2(field)
+        if direction == 'backward':
+            transfer_function = torch.conj(torch.exp(1j*self.Kz*dist))
+        else:
+            transfer_function = torch.exp(1j*Kz*dist)
+
+        field = torch.fft.ifft2(field_fft * transfer_function)
+        
+        if self.padding:
+            return field[self.padding:-1*self.padding, self.padding:-1*self.padding]
+
+        return field
     
 
 if __name__=='__main__':
