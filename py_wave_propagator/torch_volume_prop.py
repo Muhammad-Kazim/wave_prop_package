@@ -134,7 +134,7 @@ def propagate(field: Tensor,
 
 
 class FreeSpacePropagator:
-    def __init__(
+    def __init__(self,
               wavelength: float, 
               spatial_resolution: Tuple[float, float], 
               shape: Tuple[int, int],
