@@ -86,7 +86,8 @@ def propagate(field: Tensor,
     Returns:
         NDArray[np.complex128]: field at parallel plane distance dist away 
     """
-    
+
+    device = 'cuda' if field.get_device() == 0 else 'cpu'
     PAD = torchvision.transforms.Pad(padding, padding_mode=pad_mode) # edge make sense
     if padding:
         field = PAD(field.real) + 1j*PAD(field.imag) # does not handle complex properly
@@ -98,8 +99,8 @@ def propagate(field: Tensor,
     dx, dy = spatial_resolution[:2]
     
     # Spatial frequency grid
-    kx = torch.fft.fftfreq(Nx, dx) * 2 * torch.pi
-    ky = torch.fft.fftfreq(Ny, dy) * 2 * torch.pi
+    kx = torch.fft.fftfreq(Nx, dx, device=device) * 2 * torch.pi
+    ky = torch.fft.fftfreq(Ny, dy, device=device) * 2 * torch.pi
     Kx, Ky = torch.meshgrid(kx, ky, indexing='ij')
     
     Kz = k0**2 - Kx**2 - Ky**2
