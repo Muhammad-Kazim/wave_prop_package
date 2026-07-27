@@ -193,7 +193,71 @@ class FreeSpacePropagator:
             return field[self.padding:-1*self.padding, self.padding:-1*self.padding]
 
         return field
+
+
+class VolumePropagator:
+    """
+        Propagates a 2D complex wavefield using the beam propagationm method. Base units is meters.
     
+        Args:
+            field (Tensor): Input 2D complex wavefield in the (x, y, 0) plane
+            RI_distribution (Tensor): 3D refractive index distribution (x, y, z)
+            RI_background (float): background refractive index
+            wavelength (float): wavelength of source in vacuum
+            spatial_resolution (Tuple[float, float, float]): (dx, dy, dz). dz is the propagation step or slice thickness
+            padding (Optional[int], optional): Number of pixels added to the field. Defaults to None.
+    
+        Returns:
+            NDArray[np.complex64]: 2D complex wavefield at (x, y, -1)
+    """
+    
+    def __init__(
+        self, 
+        wavelength: float, 
+        spatial_resolution: Tuple[float, float, flaot], 
+        shape: Tuple[int, int, int], 
+        padding: Optional[int] = None, 
+        pad_mode: str = 'edge'
+    ) -> Tensor:
+
+        self.padding = True if padding else False
+        if self.padding:
+            self.PAD = torchvision.transforms.Pad(padding, padding_mode=pad_mode)
+            # field = PAD(field.real) + 1j*PAD(field.imag) # edge make sense
+            # symmteric would add diffraction pattern from outside FOV
+            # zeros will make the aperture diffraction pattern dominates the diffraction patter after a certain distance
+            
+        self.k0 = 2 * torch.pi / wavelength
+        self.Nx, self.Ny = shape[0] + padding*2, shape[1] + padding*2 
+        self.dx, self.dy, self.dz = spatial_resolution
+        
+        # Spatial frequency grid
+        kx = torch.fft.fftfreq(self.Nx, self.dx) * 2 * torch.pi
+        ky = torch.fft.fftfreq(self.Ny, self.dy) * 2 * torch.pi
+        self.Kx, self.Ky = torch.meshgrid(kx, ky, indexing='ij')
+
+    def forward(self, field: Tensor, RI_distribution: Tensor, RI_background: float) -> Tensor:
+
+        Kz = torch.sqrt(0j + (self.k0*RI_background)**2 - self.Kx**2 - self.Ky**2)
+        transfer_function = torch.exp(1j*Kz*self.dz)
+
+        if self. padding:
+            field = self.PAD(field.real) + 1j*self.PAD(field.imag) # edge make sense
+        
+        # Forward propagation
+        for z in range(RI_distribution.shape[2]):
+            field_fft = torch.fft.fft2(field)
+            phase = torch.exp(1j*self.k0*(RI_distribution[..., z] - RI_background)*self.dz)
+            if self.padding:
+                phase = self.PAD(phase.real) + 1j*self.PAD(phase.imag) # no delay in the padded region
+                
+            field = torch.fft.ifft2(field_fft * self.transfer_function) * phase
+        
+        if self.padding:
+            return field[int((self.Nx - RI_distribution.shape[0])/2):-1*int((self.Nx - RI_distribution.shape[0])/2), int((self.Ny - RI_distribution.shape[1])/2):-1*int((self.Ny - RI_distribution.shape[1])/2)]
+        # print(field.dtype)
+        return field
+
 
 if __name__=='__main__':
     pass
