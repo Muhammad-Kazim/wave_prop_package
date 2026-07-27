@@ -214,7 +214,7 @@ class VolumePropagator:
     def __init__(
         self, 
         wavelength: float, 
-        spatial_resolution: Tuple[float, float, flaot], 
+        spatial_resolution: Tuple[float, float, float], 
         shape: Tuple[int, int, int], 
         padding: Optional[int] = None, 
         pad_mode: str = 'edge'
