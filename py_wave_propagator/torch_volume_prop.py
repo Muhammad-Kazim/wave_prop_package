@@ -228,7 +228,7 @@ class VolumePropagator:
             # zeros will make the aperture diffraction pattern dominates the diffraction patter after a certain distance
             
         self.k0 = 2 * torch.pi / wavelength
-        self.Nx, self.Ny = shape[0] + padding*2, shape[1] + padding*2 
+        self.Nx, self.Ny = shape[0] + padding*2 if self.padding else shape[0] , shape[1] + padding*2 if self.padding else shape[1] 
         self.dx, self.dy, self.dz = spatial_resolution
         
         # Spatial frequency grid
@@ -251,7 +251,7 @@ class VolumePropagator:
             if self.padding:
                 phase = self.PAD(phase.real) + 1j*self.PAD(phase.imag) # no delay in the padded region
                 
-            field = torch.fft.ifft2(field_fft * self.transfer_function) * phase
+            field = torch.fft.ifft2(field_fft * transfer_function) * phase
         
         if self.padding:
             return field[int((self.Nx - RI_distribution.shape[0])/2):-1*int((self.Nx - RI_distribution.shape[0])/2), int((self.Ny - RI_distribution.shape[1])/2):-1*int((self.Ny - RI_distribution.shape[1])/2)]
